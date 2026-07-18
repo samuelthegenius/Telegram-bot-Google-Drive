@@ -13,6 +13,14 @@ from googleapiclient.http import MediaFileUpload
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+from flask import Flask
+import threading
+app = Flask('')
+@app.route('/')
+def home(): return "Bot is running"
+def run(): app.run(host='0.0.0.0', port=8080)
+threading.Thread(target=run).start()
+
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',level=logging.INFO)
 logger = logging.getLogger(__name__)
