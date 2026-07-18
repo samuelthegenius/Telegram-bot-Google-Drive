@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y gcc libffi-dev && rm -rf /var/lib/apt/l
 
 # Copy requirements and install
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt google-auth-oauthlib
 
 # Copy the rest of the code
 COPY . .
