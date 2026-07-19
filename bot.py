@@ -12,7 +12,6 @@ from pyrogram.types import Message
 
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.discovery import build
-from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
 from flask import Flask
@@ -48,11 +47,20 @@ def getCreds():
           creds = pickle.load(token)
   if not creds or not creds.valid:
       if creds and creds.expired and creds.refresh_token:
+          logger.info("Access token expired -- refreshing...")
           creds.refresh(Request())
+          logger.info("Token refreshed successfully.")
       else:
-          flow = InstalledAppFlow.from_client_secrets_file(
-              'credentials.json', SCOPES)
-          creds = flow.run_local_server(port=0)
+          # No usable refresh token, and this is a headless server -- an
+          # interactive flow.run_local_server() call here would just hang
+          # forever waiting for a browser that will never show up. Fail
+          # loudly instead so it shows up in the logs immediately.
+          raise RuntimeError(
+              "Google Drive credentials are missing or unrefreshable "
+              "(no refresh_token available). Re-run the local auth script "
+              "to generate a fresh token.pickle with a refresh token, then "
+              "update the PICKLED_TOKEN env var."
+          )
       with open('token.pickle', 'wb') as token:
           pickle.dump(creds, token)
   return creds
@@ -68,7 +76,9 @@ def silentremove(filename):
 def upload_to_drive(filepath, filename, mime_type):
     """Blocking Drive upload. Called via asyncio.to_thread so it doesn't
     block Pyrogram's event loop while a large file uploads."""
+    logger.info("Getting Drive credentials for %s...", filename)
     service = build('drive', 'v3', credentials=getCreds(), cache_discovery=False)
+    logger.info("Starting Drive upload for %s...", filename)
     metadata = {'name': filename}
     media = MediaFileUpload(filepath, chunksize=1024 * 1024, mimetype=mime_type, resumable=True)
     request = service.files().create(body=metadata, media_body=media)
@@ -76,7 +86,8 @@ def upload_to_drive(filepath, filename, mime_type):
     while response is None:
         status, response = request.next_chunk()
         if status:
-            print("Uploaded %d%%." % int(status.progress() * 100))
+            logger.info("Uploaded %d%% of %s", int(status.progress() * 100), filename)
+    logger.info("Drive upload complete for %s", filename)
     return response
 
 
