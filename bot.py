@@ -128,6 +128,19 @@ def extract_media(message: Message):
     return None, None, None
 
 
+def make_progress_logger(filename):
+    last_logged = {"pct": -10}
+
+    def progress(current, total):
+        pct = int(current / total * 100) if total else 0
+        if pct >= last_logged["pct"] + 10:
+            last_logged["pct"] = pct
+            logger.info("Downloading %s: %d%% (%.1f/%.1fMB)", filename, pct,
+                        current / (1024 * 1024), total / (1024 * 1024))
+
+    return progress
+
+
 @bot.on_message(filters.command("start"))
 async def start(client, message: Message):
     await message.reply_text("Upload files here.")
@@ -149,7 +162,7 @@ async def file_handler(client, message: Message):
 
     try:
         logger.info("Starting Telegram download for %s (%.1fMB)...", filename, (media.file_size or 0) / (1024 * 1024))
-        filepath = await client.download_media(message, file_name=filename)
+        filepath = await client.download_media(message, file_name=filename, progress=make_progress_logger(filename))
         logger.info("Telegram download complete for %s. Handing off to Drive upload...", filename)
         await asyncio.to_thread(upload_to_drive, filepath, filename, mime_type)
         await message.reply_text("✅ File uploaded!")
