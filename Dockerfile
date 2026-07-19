@@ -11,14 +11,14 @@ RUN apt-get update && apt-get install -y gcc libffi-dev && rm -rf /var/lib/apt/l
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt google-auth-oauthlib flask
 
-# Copy the core repository files first
+# Copy the repository files (ensure token.pickle is NOT in your repo)
 COPY . .
 
-# Force the fresh configuration file to overwrite everything right before boot
-RUN echo "import os\nTOKEN = os.environ.get('TOKEN', os.environ.get('TELEGRAM_TOKEN'))\nclass Config:\n    TOKEN = TOKEN" > config.py
+# Force the fresh configuration file to map variables directly from Render
+RUN echo "import os\nclass Config:\n    TOKEN = os.environ.get('TOKEN', os.environ.get('TELEGRAM_TOKEN'))\n    G_DRIVE_CLIENT_ID = os.environ.get('G_DRIVE_CLIENT_ID')\n    G_DRIVE_CLIENT_SECRET = os.environ.get('G_DRIVE_CLIENT_SECRET')" > config.py
 
 # Expose the Flask port we added
 EXPOSE 8080
 
-# Run the bot
-CMD ["python", "bot.py"]
+# On boot, look at Render's secure memory, turn the string back into a file, and start the script
+CMD python -c "import os, base64; token_data = os.environ.get('PICKLED_TOKEN'); f = open('token.pickle', 'wb'); f.write(base64.b64decode(token_data)) if token_data else print('Warning: No token found')" && python bot.py
