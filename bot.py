@@ -100,30 +100,61 @@ bot = Client(
 )
 
 
+# Catch every common attachment type -- forwarded files often keep their
+# original type (video, audio, etc.) rather than arriving as a generic
+# "document", so filters.document alone misses most forwards.
+MEDIA_FILTER = (
+    filters.document
+    | filters.video
+    | filters.audio
+    | filters.animation
+    | filters.voice
+    | filters.video_note
+)
+
+
+def extract_media(message: Message):
+    """Return (media_object, filename, mime_type) for whichever media type
+    is present on the message."""
+    for attr, default_ext in (
+        ("document", ""), ("video", ".mp4"), ("audio", ".mp3"),
+        ("animation", ".gif"), ("voice", ".ogg"), ("video_note", ".mp4"),
+    ):
+        media = getattr(message, attr, None)
+        if media:
+            filename = getattr(media, "file_name", None) or f"{media.file_unique_id}{default_ext}"
+            mime_type = getattr(media, "mime_type", None)
+            return media, filename, mime_type
+    return None, None, None
+
+
 @bot.on_message(filters.command("start"))
 async def start(client, message: Message):
     await message.reply_text("Upload files here.")
 
 
-@bot.on_message(filters.document)
+@bot.on_message(MEDIA_FILTER)
 async def file_handler(client, message: Message):
-    doc = message.document
+    media, filename, mime_type = extract_media(message)
+    if media is None:
+        return
 
-    if doc.file_size and doc.file_size > MAX_TELEGRAM_FILE_SIZE:
-        size_mb = doc.file_size / (1024 * 1024)
+    if media.file_size and media.file_size > MAX_TELEGRAM_FILE_SIZE:
+        size_mb = media.file_size / (1024 * 1024)
         limit_mb = MAX_TELEGRAM_FILE_SIZE / (1024 * 1024)
         await message.reply_text(
             f"❌ That file is {size_mb:.1f}MB. This bot can only handle files up to {limit_mb:.0f}MB."
         )
         return
 
-    filename = doc.file_name
     try:
+        logger.info("Starting Telegram download for %s (%.1fMB)...", filename, (media.file_size or 0) / (1024 * 1024))
         filepath = await client.download_media(message, file_name=filename)
-        await asyncio.to_thread(upload_to_drive, filepath, filename, doc.mime_type)
+        logger.info("Telegram download complete for %s. Handing off to Drive upload...", filename)
+        await asyncio.to_thread(upload_to_drive, filepath, filename, mime_type)
         await message.reply_text("✅ File uploaded!")
     except Exception:
-        logger.exception("Upload failed")
+        logger.exception("Upload failed for %s", filename)
         await message.reply_text("❌ Something went wrong uploading that file. Check the logs for details.")
     finally:
         silentremove(filename)
