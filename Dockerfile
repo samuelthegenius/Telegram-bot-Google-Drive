@@ -1,22 +1,22 @@
-# Use an older Python version where legacy collections mapping works natively
-FROM python:3.8-slim
+# Newer Python needed for asyncio.to_thread (3.9+) and current Pyrogram/Kurigram
+FROM python:3.11-slim
 
 # Set work directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (gcc/libffi needed to build TgCrypto)
 RUN apt-get update && apt-get install -y gcc libffi-dev && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install missing pieces
+# Copy requirements and install
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt google-auth-oauthlib flask
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the repository files (ensure token.pickle is NOT in your repo)
 COPY . .
 
 # Force the fresh configuration file to map variables directly from Render.
-# NOTE: module-level variables, NOT a class -- bot.py reads config.TOKEN directly.
-RUN echo "import os\nTOKEN = os.environ.get('TOKEN', os.environ.get('TELEGRAM_TOKEN'))\nG_DRIVE_CLIENT_ID = os.environ.get('G_DRIVE_CLIENT_ID')\nG_DRIVE_CLIENT_SECRET = os.environ.get('G_DRIVE_CLIENT_SECRET')" > config.py
+# NOTE: module-level variables, NOT a class -- bot.py reads config.TOKEN etc. directly.
+RUN echo "import os\nTOKEN = os.environ.get('TOKEN', os.environ.get('TELEGRAM_TOKEN'))\nAPI_ID = int(os.environ.get('TELEGRAM_API_ID', 0))\nAPI_HASH = os.environ.get('TELEGRAM_API_HASH')\nG_DRIVE_CLIENT_ID = os.environ.get('G_DRIVE_CLIENT_ID')\nG_DRIVE_CLIENT_SECRET = os.environ.get('G_DRIVE_CLIENT_SECRET')" > config.py
 
 # Expose the Flask port we added
 EXPOSE 8080
