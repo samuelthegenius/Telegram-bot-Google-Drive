@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 import os
+import time
 import pickle
 import asyncio
 import logging
 import threading
 
+import requests
 import config
 
 from pyrogram import Client, filters
@@ -31,6 +33,24 @@ def home(): return "Bot is running"
 def run_flask(): flask_app.run(host='0.0.0.0', port=8080)
 
 threading.Thread(target=run_flask, daemon=True).start()
+
+
+def self_ping_loop():
+    """Periodically hit our own public URL so Render's free tier sees
+    inbound traffic and doesn't spin the instance down mid-transfer.
+    Not a guarantee -- Render can still restart free services at any
+    time -- but it meaningfully reduces the risk for long uploads."""
+    external_url = os.environ.get('RENDER_EXTERNAL_URL')
+    if not external_url:
+        return
+    while True:
+        time.sleep(300)  # well under Render's 15-minute free-tier idle timeout
+        try:
+            requests.get(external_url, timeout=10)
+        except Exception:
+            logger.warning("Self-ping failed", exc_info=True)
+
+threading.Thread(target=self_ping_loop, daemon=True).start()
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
